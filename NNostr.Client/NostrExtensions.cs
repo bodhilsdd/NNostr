@@ -570,14 +570,13 @@ namespace NNostr.Client
             CancellationToken cancellationToken)
         {
 #if NETSTANDARD
-
-            await Task.WhenAny(tcs.Task, new Task(async o =>
+            var cancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (cancellationToken.Register(() => cancelled.TrySetResult(true)))
             {
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    await Task.Delay(100, cancellationToken);
-                }
-            }, cancellationToken));
+                if (await Task.WhenAny(tcs.Task, cancelled.Task) != tcs.Task)
+                    throw new OperationCanceledException(cancellationToken);
+            }
+            await tcs.Task;
 #else
                 await tcs.Task.WaitAsync(cancellationToken);
 #endif
